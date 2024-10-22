@@ -9,10 +9,10 @@ terraform {
 
 provider "azurerm" {
   # Configuration options
-  subscription_id = ""
-  tenant_id       = ""
-  client_id       = ""
-  client_secret   = ""
+  subscription_id = "FIXME:your_subscription_id"
+  tenant_id       = "FIXME:your_tenant_id"
+  client_id       = "FIXME:your_client_id"
+  client_secret   = "FIXME:your_client_secret"
   features {}
 }
 
@@ -77,4 +77,94 @@ resource "azurerm_public_ip" "gp-vm-public-ip" {
   allocation_method   = "Static"
 
   depends_on = [azurerm_resource_group.gp-vm-group]
+}
+
+resource "azurerm_network_security_group" "gp-vm-nsg" {
+  name                = "gp-vm-nsg"
+  location            = local.location
+  resource_group_name = local.resource_group_name
+
+  depends_on = [azurerm_resource_group.gp-vm-group]
+}
+
+resource "azurerm_network_security_rule" "ssh_rule" {
+  name                        = "allow_ssh"
+  priority                    = 100
+  direction                   = "Inbound"
+  access                      = "Allow"
+  protocol                    = "Tcp"
+  source_port_range           = "*"
+  destination_port_range      = "22"
+  source_address_prefix       = "*"
+  destination_address_prefix  = "*"
+  network_security_group_name = azurerm_network_security_group.gp-vm-nsg.name
+
+  depends_on = [azurerm_network_security_group.gp-vm-nsg]
+}
+
+resource "azurerm_network_security_rule" "http_rule" {
+  name                        = "allow_http"
+  priority                    = 101
+  direction                   = "Inbound"
+  access                      = "Allow"
+  protocol                    = "Tcp"
+  source_port_range           = "*"
+  destination_port_range      = "80"
+  source_address_prefix       = "*"
+  destination_address_prefix  = "*"
+  network_security_group_name = azurerm_network_security_group.gp-vm-nsg.name
+  
+  depends_on = [azurerm_network_security_group.gp-vm-nsg]
+}
+
+resource "azurerm_network_security_rule" "https_rule" {
+  name                        = "allow_https"
+  priority                    = 102
+  direction                   = "Inbound"
+  access                      = "Allow"
+  protocol                    = "Tcp"
+  source_port_range           = "*"
+  destination_port_range      = "443"
+  source_address_prefix       = "*"
+  destination_address_prefix  = "*"
+  network_security_group_name = azurerm_network_security_group.gp-vm-nsg.name
+  
+  depends_on = [azurerm_network_security_group.gp-vm-nsg]
+}
+
+resource "azurerm_subnet_network_security_group_association" "gp_vm_subnet_nsg_association" {
+  subnet_id                 = azurerm_subnet.subnetA.id
+  network_security_group_id = azurerm_network_security_group.gp-vm-nsg.id
+}
+
+resource "azurerm_linux_virtual_machine" "gp-research-linux-vm" {
+  name                = "gp-research-linux-vm"
+  resource_group_name = local.resource_group_name
+  location            = local.location
+  size                = "Standard_D4s_v3"
+  admin_username      = "FIXME:s3ty0urn4m3"
+  admin_password      = "FIXME:s3ty0urp4ssw0rd"
+  disable_password_authentication = false
+
+  network_interface_ids = [
+    azurerm_network_interface.gp-vm-nic.id,
+  ]
+
+  os_disk {
+    caching              = "ReadWrite"
+    storage_account_type = "Standard_LRS"
+    disk_size_gb         = 1024
+  }
+
+  source_image_reference {
+    publisher = "Canonical"
+    offer     = "0001-com-ubuntu-server-jammy"
+    sku       = "22_04-lts-gen2"
+    version   = "latest"
+  }
+
+  depends_on = [
+    azurerm_network_interface.gp-vm-nic,
+    azurerm_public_ip.gp-vm-public-ip,
+  ]
 }
